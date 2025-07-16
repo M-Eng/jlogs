@@ -39,6 +39,11 @@ def main():
         'today',
         help='Create today\'s log file with a predefined markdown template'
     )
+    today_parser.add_argument(
+        'editor',
+        nargs='?',
+        help='Editor command to open the file with (e.g., code, vim, nano)'
+    )
     
     # jlog aggregate
     aggregate_parser = subparsers.add_parser(
@@ -65,7 +70,7 @@ def main():
         if args.command == 'init':
             init_command()
         elif args.command == 'today':
-            today_command()
+            today_command(args.editor)
         elif args.command == 'aggregate':
             aggregate_command()
         elif args.command == 'push':

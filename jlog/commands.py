@@ -122,7 +122,7 @@ def init_command() -> None:
     print(f"🎉 Journal initialized! You can now use 'jlog today' to create your first entry.")
 
 
-def today_command() -> None:
+def today_command(editor: Optional[str] = None) -> None:
     """Create today's log file with predefined template."""
     journal_root = get_journal_root()
     if not journal_root:
@@ -139,15 +139,26 @@ def today_command() -> None:
     today_file = entries_dir / f"{today_date}.md"
     
     # Check if file already exists
-    if today_file.exists():
+    file_existed = today_file.exists()
+    if file_existed:
         print(f"📝 Today's entry already exists: {today_file}")
-        return
+    else:
+        # Create today's entry
+        template = get_daily_template(today_date)
+        today_file.write_text(template)
+        print(f"✅ Created today's entry: {today_file}")
     
-    # Create today's entry
-    template = get_daily_template(today_date)
-    today_file.write_text(template)
-    
-    print(f"✅ Created today's entry: {today_file}")
+    # Open in editor if specified
+    if editor:
+        print(f"🖊️  Opening in {editor}...")
+        try:
+            subprocess.run([editor, str(today_file)], check=True)
+        except subprocess.CalledProcessError as e:
+            print(f"❌ Failed to open with {editor}: {e}")
+        except FileNotFoundError:
+            print(f"❌ Editor '{editor}' not found. Please make sure it's installed and in your PATH.")
+        except Exception as e:
+            print(f"❌ Error opening editor: {e}")
 
 
 def aggregate_command() -> None:
