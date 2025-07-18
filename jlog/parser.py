@@ -8,50 +8,106 @@ from pathlib import Path
 from typing import Dict, List, Tuple, Optional
 
 
+def parse_extra_hours(extra: str) -> Optional[str]:
+    """
+    Parse extra hours string and return hours as a float string.
+    Accepts formats like '1.5h', '1h30', '1h30min', '30min', '90m', '2h', '1:30', etc.
+    """
+    if not extra:
+        return None
+
+    # Normalize
+    s = extra.strip().lower().replace(" ", "")
+
+    # Try to match "1.5h" or "2h"
+    m = re.match(r"^(\d+(?:\.\d+)?)h?$", s)
+    if m:
+        return str(float(m.group(1)))
+
+    # Try to match "1h30", "1h30m", "1h30min", "1h 30min"
+    m = re.match(r"^(?P<h>\d+(?:\.\d+)?)h(?P<m>\d{1,2})(?:m(?:in)?)?$", s)
+    if m:
+        hours = float(m.group("h"))
+        minutes = float(m.group("m"))
+        return str(hours + minutes / 60)
+
+    # Try to match "30min", "45m", "90min"
+    m = re.match(r"^(?P<m>\d{1,3})\s*(?:m(?:in)?)$", s)
+    if m:
+        minutes = float(m.group("m"))
+        return str(minutes / 60)
+
+    # Try to match "1:30" (hh:mm)
+    m = re.match(r"^(?P<h>\d{1,2}):(?P<m>\d{1,2})$", s)
+    if m:
+        hours = float(m.group("h"))
+        minutes = float(m.group("m"))
+        return str(hours + minutes / 60)
+
+    # Try to match "1h" (just hours)
+    m = re.match(r"^(?P<h>\d+(?:\.\d+)?)h$", s)
+    if m:
+        return str(float(m.group("h")))
+
+    # Try to match "1h 30min" (with space)
+    m = re.match(r"^(?P<h>\d+(?:\.\d+)?)h\s*(?P<m>\d{1,2})m(?:in)?$", s)
+    if m:
+        hours = float(m.group("h"))
+        minutes = float(m.group("m"))
+        return str(hours + minutes / 60)
+
+    # Fallback: try to extract any number and treat as hours
+    m = re.match(r"^(\d+(?:\.\d+)?)$", s)
+    if m:
+        return str(float(m.group(1)))
+
+    return s  # fallback to original if can't parse
+
 def parse_time_tracking(content: str) -> Dict[str, Optional[str]]:
     """
     Parse time tracking information from markdown content.
-    
+
     Args:
         content: Markdown content as string
-        
+
     Returns:
-        Dictionary with start_time, end_time, and worked_hours
+        Dictionary with start_time, end_time, and extra_hours (normalized to hours as float string if possible)
     """
+
     time_data = {
         "start_time": None,
         "end_time": None,
         "extra_hours": None
     }
-    
+
     # Find time tracking section
     time_section_match = re.search(r"##\s*⏰\s*Time Tracking(.*?)(?=##|$)", content, re.DOTALL | re.IGNORECASE)
     if not time_section_match:
         return time_data
-    
+
     time_section = time_section_match.group(1)
-    
+
     # Parse start time
     start_match = re.search(r"Start time\*?\*?:\s*([^\n\r]+)", time_section, re.IGNORECASE)
     if start_match:
         start_time = start_match.group(1).strip()
         if start_time and start_time != "":
             time_data["start_time"] = start_time
-    
+
     # Parse end time
     end_match = re.search(r"End time\*?\*?:\s*([^\n\r]+)", time_section, re.IGNORECASE)
     if end_match:
         end_time = end_match.group(1).strip()
         if end_time and end_time != "":
             time_data["end_time"] = end_time
-    
+
     # Parse extra hours
     extra_match = re.search(r"Extra hours\*?\*?:\s*([^\n\r]+)", time_section, re.IGNORECASE)
     if extra_match:
         extra_hours = extra_match.group(1).strip()
         if extra_hours and extra_hours != "":
-            time_data["extra_hours"] = extra_hours
-    
+            time_data["extra_hours"] = parse_extra_hours(extra_hours)
+
     return time_data
 
 
