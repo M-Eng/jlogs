@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Optional
 
 from .parser import parse_journal_entries
-from .templates import get_daily_template, get_aggregated_table_template, get_readme_template
+from .templates import get_daily_template, get_aggregated_table_template, get_readme_template, create_daily_hours_chart_html, create_weekly_hours_chart_html, create_daily_hours_chart_image, create_weekly_hours_chart_image
 
 
 def get_config_file() -> Path:
@@ -209,6 +209,36 @@ def aggregate_command() -> None:
     total_entries = sum(len(entries) for entries in aggregated_data.values())
     print(f"✅ Updated README.md with {total_entries} total entries")
     
+    # Create visualizations directory and generate charts
+    visualizations_dir = journal_root / "visualizations"
+    visualizations_dir.mkdir(exist_ok=True)
+    
+    # Generate charts if time data exists
+    time_data = aggregated_data.get("time_tracking", {})
+    if time_data:
+        # Generate static PNG images (for GitHub viewing)
+        daily_png_success = create_daily_hours_chart_image(time_data, str(visualizations_dir / "daily_hours.png"))
+        weekly_png_success = create_weekly_hours_chart_image(time_data, str(visualizations_dir / "weekly_hours.png"))
+        
+        if daily_png_success and weekly_png_success:
+            print("✅ Generated static chart images (PNG) for GitHub viewing")
+        elif not daily_png_success or not weekly_png_success:
+            print("⚠️  Could not generate PNG charts (matplotlib not available). Install with: pip install matplotlib")
+        
+        # Generate interactive HTML charts (for local viewing)
+        daily_chart_html = create_daily_hours_chart_html(time_data)
+        daily_chart_file = visualizations_dir / "daily_hours.html"
+        daily_chart_file.write_text(daily_chart_html)
+        
+        weekly_chart_html = create_weekly_hours_chart_html(time_data)
+        weekly_chart_file = visualizations_dir / "weekly_hours.html"
+        weekly_chart_file.write_text(weekly_chart_html)
+        
+        print("✅ Generated interactive HTML charts for local viewing")
+        
+    else:
+        print("⚠️  No time tracking data found, skipping visualizations")
+    
     print("🎉 Aggregation complete!")
 
 
@@ -242,57 +272,88 @@ def push_command() -> None:
         print(f"❌ Failed to add files: {output}")
         return
     
+    # Check if there are unpushed commits
+    print("🔍 Checking for unpushed commits...")
+    
+    # First, get the current branch and check for remote tracking
+    branch_success, branch_output = run_git_command(['git', 'branch', '--show-current'], journal_root)
+    current_branch = branch_output.strip() if branch_success else "main"
+    
+    # Try to check for unpushed commits using remote tracking branch
+    check_success, check_output = run_git_command(['git', 'log', f'origin/{current_branch}..HEAD', '--oneline'], journal_root)
+    if not check_success:
+        # Fallback: check if remote exists and try common branch names
+        remote_success, _ = run_git_command(['git', 'remote'], journal_root)
+        if remote_success:
+            # Try main first, then master
+            for branch in ['main', 'master']:
+                check_success, check_output = run_git_command(['git', 'log', f'origin/{branch}..HEAD', '--oneline'], journal_root)
+                if check_success:
+                    break
+    
+    has_unpushed_commits = check_success and check_output.strip()
+    
     # Git commit
     commit_message = f"Update journal logs on {today_date}"
     print(f"💾 Committing changes: {commit_message}")
-    success, output = run_git_command(['git', 'commit', '-m', commit_message], journal_root)
-    if not success:
-        if "nothing to commit" in output:
-            print("✅ Nothing to commit, working tree clean")
-        else:
-            print(f"❌ Failed to commit: {output}")
-            return
+    commit_success, commit_output = run_git_command(['git', 'commit', '-m', commit_message], journal_root)
     
-    # Git push
-    print("🚀 Pushing to remote...")
-    success, output = run_git_command(['git', 'push'], journal_root)
-    if success:
-        print("✅ Successfully pushed to remote!")
-        if output.strip():
-            print(output)
-    else:
-        # Check if the error is about missing upstream branch
-        if "has no upstream branch" in output or "set-upstream" in output:
-            print("⚠️  No upstream branch set. Setting up upstream...")
-            
-            # Get current branch name
-            branch_success, branch_output = run_git_command(['git', 'branch', '--show-current'], journal_root)
-            if branch_success:
-                current_branch = branch_output.strip()
-            else:
-                current_branch = "main"  # fallback
-            
-            # Try to push with upstream
-            success, output = run_git_command(['git', 'push', '-u', 'origin', current_branch], journal_root)
-            if success:
-                print("✅ Successfully pushed with upstream!")
-                if output.strip():
-                    print(output)
-            else:
-                print(f"❌ Failed to push with upstream: {output}")
+    # Handle commit result
+    if not commit_success:
+        if "nothing to commit" in commit_output:
+            print("✅ Nothing new to commit, working tree clean")
         else:
-            print(f"❌ Failed to push: {output}")
-            # Try to push with upstream as fallback
-            branch_success, branch_output = run_git_command(['git', 'branch', '--show-current'], journal_root)
-            if branch_success:
-                current_branch = branch_output.strip()
-            else:
-                current_branch = "main"  # fallback
+            print(f"❌ Failed to commit: {commit_output}")
+            # Don't return - we might still need to push previous commits
+    
+    # Update unpushed commits status if commit succeeded
+    if commit_success:
+        has_unpushed_commits = True
+    
+    # Git push - attempt if we have unpushed commits
+    if has_unpushed_commits or commit_success:
+        print("🚀 Pushing to remote...")
+        success, output = run_git_command(['git', 'push'], journal_root)
+        
+        if success:
+            print("✅ Successfully pushed to remote!")
+            if output.strip():
+                print(output)
+        else:
+            # Check if the error is about missing upstream branch
+            if "has no upstream branch" in output or "set-upstream" in output:
+                print("⚠️  No upstream branch set. Setting up upstream...")
                 
-            success, output = run_git_command(['git', 'push', '-u', 'origin', current_branch], journal_root)
-            if success:
-                print("✅ Successfully pushed with upstream!")
-                if output.strip():
-                    print(output)
+                # Get current branch name
+                branch_success, branch_output = run_git_command(['git', 'branch', '--show-current'], journal_root)
+                if branch_success:
+                    current_branch = branch_output.strip()
+                else:
+                    current_branch = "main"  # fallback
+                
+                # Try to push with upstream
+                success, output = run_git_command(['git', 'push', '-u', 'origin', current_branch], journal_root)
+                if success:
+                    print("✅ Successfully pushed with upstream!")
+                    if output.strip():
+                        print(output)
+                else:
+                    print(f"❌ Failed to push with upstream: {output}")
             else:
-                print(f"❌ Failed to push with upstream: {output}") 
+                print(f"❌ Failed to push: {output}")
+                # Try to push with upstream as fallback
+                branch_success, branch_output = run_git_command(['git', 'branch', '--show-current'], journal_root)
+                if branch_success:
+                    current_branch = branch_output.strip()
+                else:
+                    current_branch = "main"  # fallback
+                    
+                success, output = run_git_command(['git', 'push', '-u', 'origin', current_branch], journal_root)
+                if success:
+                    print("✅ Successfully pushed with upstream!")
+                    if output.strip():
+                        print(output)
+                else:
+                    print(f"❌ Failed to push with upstream: {output}")
+    else:
+        print("✅ No commits to push") 
