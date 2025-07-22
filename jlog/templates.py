@@ -38,7 +38,6 @@ def create_daily_hours_chart_image(time_data: dict, output_path: str) -> bool:
             except ValueError:
                 continue
     
-    print(f"all_dates: {all_dates}")
     if not all_dates:
         return False
     
@@ -65,7 +64,7 @@ def create_daily_hours_chart_image(time_data: dict, output_path: str) -> bool:
     ax.fill_between(dates, hours, alpha=0.3, color='#4CAF50')
     
     # Customize the chart
-    ax.set_title('📊 Daily Work Hours', fontsize=20, fontweight='bold', pad=20)
+    ax.set_title('Daily Work Hours', fontsize=20, fontweight='bold', pad=20)
     ax.set_xlabel('Date', fontsize=12, fontweight='bold')
     ax.set_ylabel('Work Hours', fontsize=12, fontweight='bold')
     
@@ -149,7 +148,7 @@ def create_weekly_hours_chart_image(time_data: dict, output_path: str) -> bool:
         bar.set_linewidth(2)
     
     # Customize the chart
-    ax.set_title('📈 Weekly Work Hours', fontsize=20, fontweight='bold', pad=20)
+    ax.set_title('Weekly Work Hours', fontsize=20, fontweight='bold', pad=20)
     ax.set_xlabel('Week Starting', fontsize=12, fontweight='bold')
     ax.set_ylabel('Work Hours', fontsize=12, fontweight='bold')
     
